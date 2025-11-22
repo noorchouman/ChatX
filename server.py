@@ -25,7 +25,7 @@ class ChatXServer:
     def __init__(self, host: str = SERVER_HOST, port: int = SERVER_PORT):
         self.host = host
         self.port = port
-        # {username: {"ip": str, "tcp_port": int, "udp_port": int}}
+        # {username: {"ip": str, "tcp_port": int, "udp_port": int, "last_seen": datetime}}
         self.peers = {}
         self.running = False
         self.server_socket: socket.socket | None = None
@@ -90,6 +90,10 @@ class ChatXServer:
         """Process different types of client messages."""
         msg_type = message.get("type")
         username = message.get("username")
+        
+        # Update last_seen for any peer making a request
+        if username and username in self.peers:
+            self.peers[username]["last_seen"] = datetime.now()
 
         if msg_type == PEER_REGISTER:
             tcp_port = message.get("tcp_port")
@@ -98,10 +102,20 @@ class ChatXServer:
             if not username or tcp_port is None or udp_port is None:
                 return {"status": "error", "message": "Missing registration fields"}
 
+            # If peer already exists with same username, remove old entry (new registration = old one is stale)
+            if username in self.peers:
+                old_info = self.peers[username]
+                # Check if it's the same IP/port (same client reconnecting) or different (new client with same username)
+                if old_info["ip"] != address[0] or old_info["tcp_port"] != tcp_port:
+                    self._log_event(f"Replacing peer: {username} (old: {old_info['ip']}:{old_info['tcp_port']}, new: {address[0]}:{tcp_port})")
+                else:
+                    self._log_event(f"Peer re-registered: {username} from {address}")
+
             self.peers[username] = {
                 "ip": address[0],
                 "tcp_port": tcp_port,
                 "udp_port": udp_port,
+                "last_seen": datetime.now(),
             }
             self._log_event(f"Peer registered: {username} from {address}")
             return {"status": "success", "message": "Registered successfully"}
@@ -113,14 +127,54 @@ class ChatXServer:
             return {"status": "success", "message": "Unregistered successfully"}
 
         elif msg_type == PEER_LIST_REQUEST:
-            # Return list of peers (excluding requester)
-            peer_list = {
-                user: info for user, info in self.peers.items() if user != username
-            }
-            self._log_event(f"Peer list requested by: {username}")
+            # Clean up stale peers and return only active ones (excluding requester)
+            # Only clean up if we have peers to check (avoid unnecessary work)
+            if len(self.peers) > 1:
+                self._cleanup_stale_peers()
+            
+            peer_list = {}
+            for user, info in self.peers.items():
+                if user != username:
+                    # Only include peer info (not last_seen timestamp)
+                    peer_list[user] = {
+                        "ip": info["ip"],
+                        "tcp_port": info["tcp_port"],
+                        "udp_port": info["udp_port"],
+                    }
+            self._log_event(f"Peer list requested by: {username} ({len(peer_list)} active peers)")
             return {"status": "success", "peers": peer_list}
 
         return {"status": "error", "message": "Unknown message type"}
+
+    def _verify_peer_reachable(self, ip: str, tcp_port: int, timeout: float = 1.0) -> bool:
+        """Verify if a peer is still reachable by attempting to connect to its TCP port."""
+        try:
+            test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_socket.settimeout(timeout)
+            result = test_socket.connect_ex((ip, tcp_port))
+            test_socket.close()
+            return result == 0  # 0 means connection successful
+        except Exception:
+            return False
+    
+    def _cleanup_stale_peers(self) -> None:
+        """Remove peers that are no longer reachable (with timeout to avoid blocking)."""
+        stale_peers = []
+        current_time = datetime.now()
+        
+        for username, info in self.peers.items():
+            # Check if peer hasn't been seen in a while (more than 30 seconds)
+            last_seen = info.get("last_seen")
+            if last_seen:
+                time_diff = (current_time - last_seen).total_seconds()
+                # Only verify peers that haven't been seen recently
+                if time_diff > 30:
+                    if not self._verify_peer_reachable(info["ip"], info["tcp_port"], timeout=0.5):
+                        stale_peers.append(username)
+        
+        for username in stale_peers:
+            del self.peers[username]
+            self._log_event(f"Removed stale peer: {username} (unreachable)")
 
     @staticmethod
     def _log_event(event: str) -> None:

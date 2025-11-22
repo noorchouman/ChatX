@@ -90,22 +90,56 @@ class NetworkManager:
         threading.Thread(target=tcp_listener, daemon=True).start()
 
     def _handle_tcp_connection(self, client_socket: socket.socket, address) -> None:
-        """Handle incoming TCP chat connections."""
+        """Handle incoming TCP chat connections with JSON message format."""
         try:
             while self.running:
                 data = client_socket.recv(BUFFER_SIZE)
                 if not data:
                     break
 
-                message = data.decode("utf-8")
-                self._emit_gui_event(
-                    {
-                        "type": "chat_message",
-                        "sender_ip": address[0],
-                        "message": message,
-                        "direction": "incoming",
-                    }
-                )
+                try:
+                    # Try to parse as JSON
+                    text = data.decode("utf-8")
+                    message_packet = json.loads(text)
+                    
+                    # Check if it's a chat message packet
+                    if message_packet.get("type") == "chat":
+                        sender_username = message_packet.get("from", "unknown")
+                        target_username = message_packet.get("to", "unknown")
+                        message_text = message_packet.get("text", "")
+                        
+                        self._emit_gui_event(
+                            {
+                                "type": "chat_message",
+                                "sender_username": sender_username,
+                                "target_username": target_username,
+                                "message": message_text,
+                                "direction": "incoming",
+                            }
+                        )
+                    else:
+                        # Fallback: treat as plain text (for backwards compatibility)
+                        self._emit_gui_event(
+                            {
+                                "type": "chat_message",
+                                "sender_username": "unknown",
+                                "target_username": self.username,
+                                "message": text,
+                                "direction": "incoming",
+                            }
+                        )
+                except (json.JSONDecodeError, KeyError):
+                    # Fallback: treat as plain text message
+                    message = data.decode("utf-8", errors="ignore")
+                    self._emit_gui_event(
+                        {
+                            "type": "chat_message",
+                            "sender_username": "unknown",
+                            "target_username": self.username,
+                            "message": message,
+                            "direction": "incoming",
+                        }
+                    )
         except Exception as e:
             print(f"TCP connection handling error: {e}")
         finally:
@@ -128,18 +162,27 @@ class NetworkManager:
     # ------------------------------------------------------------------
     # TCP chat
     # ------------------------------------------------------------------
-    def send_chat_message(self, peer_ip: str, peer_tcp_port: int, message: str) -> bool:
-        """Send chat message to peer via TCP."""
+    def send_chat_message(self, peer_ip: str, peer_tcp_port: int, message: str, target_username: str = None) -> bool:
+        """Send chat message to peer via TCP using JSON format with usernames."""
         try:
+            # Create JSON message packet with from/to usernames
+            message_packet = {
+                "type": "chat",
+                "from": self.username,
+                "to": target_username or "unknown",
+                "text": message
+            }
+            
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.connect((peer_ip, peer_tcp_port))
-                sock.send(message.encode("utf-8"))
+                sock.send(json.dumps(message_packet).encode("utf-8"))
 
             # Notify GUI about outgoing message
             self._emit_gui_event(
                 {
                     "type": "chat_message",
-                    "sender_ip": "me",
+                    "sender_username": self.username,
+                    "target_username": target_username,
                     "message": message,
                     "direction": "outgoing",
                 }
@@ -264,7 +307,17 @@ class NetworkManager:
             if not filename:
                 return
 
-            save_name = f"received_{filename}"
+            # Save to proper directory (Downloads/ChatX_Received)
+            import os
+            if os.name == 'nt':  # Windows
+                downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
+            else:  # Linux/Mac
+                downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
+            
+            chatx_dir = os.path.join(downloads, 'ChatX_Received')
+            os.makedirs(chatx_dir, exist_ok=True)
+            
+            save_name = os.path.join(chatx_dir, f"received_{filename}")
             try:
                 f = open(save_name, "wb")
             except OSError as e:

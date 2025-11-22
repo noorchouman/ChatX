@@ -9,6 +9,7 @@ from gui import ChatXClientGUI
 def main():
     app = QApplication(sys.argv)
     window = ChatXClientGUI()
+    # Window will be shown after username dialog in __init__
     window.show()
     sys.exit(app.exec())
 
