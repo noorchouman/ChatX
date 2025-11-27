@@ -39,21 +39,24 @@ class NetworkEventBridge(QtCore.QObject):
 # ----------------------------------------------------------------------
 class UsernameDialog(QDialog):
     """Dialog to get username when application starts."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Welcome to ChatX")
         self.setModal(True)
-        self.setMinimumWidth(350)
-        
+        self.setMinimumWidth(400)
+
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        
+        layout.setSpacing(12)
+        layout.setContentsMargins(30, 30, 30, 30)
+
         # Title
         title = QLabel("Enter Your Username")
         title.setObjectName("dialogTitle")
         layout.addWidget(title)
-        
+
+        layout.addSpacing(8)
+
         # Username input
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Enter your username")
@@ -65,7 +68,9 @@ class UsernameDialog(QDialog):
         self.username_input.setText(default_username)
         self.username_input.selectAll()
         layout.addWidget(self.username_input)
-        
+
+        layout.addSpacing(4)
+
         # Server input
         server_label = QLabel("Server IP:")
         layout.addWidget(server_label)
@@ -74,7 +79,9 @@ class UsernameDialog(QDialog):
         from config import SERVER_HOST
         self.server_input.setText(SERVER_HOST)
         layout.addWidget(self.server_input)
-        
+
+        layout.addSpacing(12)
+
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -82,51 +89,79 @@ class UsernameDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        
+
         # Set focus to username input
         self.username_input.setFocus()
-        
+
         # Apply dialog styling
         self.setStyleSheet("""
             QDialog {
-                background-color: #ffffff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ffffff, stop:1 #fafbfc);
             }
             QLabel#dialogTitle {
-                font-size: 18px;
-                font-weight: 600;
-                color: #1d1d1f;
-                padding-bottom: 8px;
+                font-size: 22px;
+                font-weight: 700;
+                color: #1a1a2e;
+                padding-bottom: 4px;
+            }
+            QLabel {
+                color: #2c2c2e;
+                font-weight: 500;
+                font-size: 13px;
             }
             QLineEdit {
                 background-color: #ffffff;
-                color: #111111;
+                color: #1d1d1f;
                 border-radius: 8px;
-                padding: 8px 12px;
-                border: 1px solid #d1d1d6;
-                min-height: 20px;
+                padding: 11px 14px;
+                border: 1.5px solid rgba(0, 0, 0, 0.12);
+                min-height: 22px;
+                font-size: 14px;
             }
             QLineEdit:focus {
-                border: 2px solid #0b93f6;
-                background-color: #fafafa;
+                border: 2px solid #0a84ff;
+                background-color: #ffffff;
+            }
+            QLineEdit:hover {
+                border: 1.5px solid rgba(0, 0, 0, 0.18);
+            }
+            QDialogButtonBox {
+                margin-top: 4px;
             }
             QPushButton {
-                background-color: #e5e5ea;
-                color: #111111;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fb, stop:1 #eef0f3);
+                color: #2c2c2e;
                 border-radius: 8px;
-                padding: 8px 16px;
-                border: 1px solid #d1d1d6;
-                min-height: 32px;
+                padding: 11px 22px;
+                border: 1px solid rgba(0, 0, 0, 0.12);
+                min-height: 16px;
+                min-width: 85px;
+                font-weight: 600;
+                font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #d8d8dd;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #eef0f3, stop:1 #e3e5e8);
+                border: 1px solid rgba(0, 0, 0, 0.16);
+            }
+            QPushButton:pressed {
+                background: #dfe1e4;
             }
             QPushButton[text="OK"] {
-                background-color: #0b93f6;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #0a84ff, stop:1 #0066cc);
                 color: #ffffff;
-                font-weight: 600;
+                font-weight: 700;
+                border: none;
             }
             QPushButton[text="OK"]:hover {
-                background-color: #007aff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #0077ed, stop:1 #005bb5);
+            }
+            QPushButton[text="OK"]:pressed {
+                background: #005bb5;
             }
         """)
         
@@ -147,16 +182,23 @@ class ChatBubble(QWidget):
         super().__init__()
 
         outer_layout = QHBoxLayout(self)
-        outer_layout.setContentsMargins(4, 0, 4, 0)
-        outer_layout.setSpacing(4)
+        outer_layout.setContentsMargins(8, 2, 8, 2)
+        outer_layout.setSpacing(8)
 
+        # Create bubble container
+        bubble_container = QWidget()
+        bubble_layout = QVBoxLayout(bubble_container)
+        bubble_layout.setContentsMargins(0, 0, 0, 0)
+        bubble_layout.setSpacing(2)
+
+        # Main message label
         bubble = QLabel()
         bubble.setWordWrap(True)
         bubble.setTextFormat(QtCore.Qt.TextFormat.RichText)
-        bubble.setAutoFillBackground(True)
+        bubble.setMaximumWidth(480)
 
         escaped_text = html.escape(text)
-        
+
         # Format timestamp (show time only, e.g., "2:30 PM")
         time_str = ""
         if timestamp:
@@ -169,43 +211,63 @@ class ChatBubble(QWidget):
                 time_str = dt.strftime("%I:%M %p")  # e.g., "02:30 PM"
             except:
                 time_str = ""
-        
-        # Build message text with timestamp
+
+        # Build message text
         if sender and not outgoing:
             escaped_sender = html.escape(sender)
-            if time_str:
-                bubble.setText(f"<b>{escaped_sender}</b><br>{escaped_text}<br><small style='color: #666; font-size: 10px;'>{time_str}</small>")
-            else:
-                bubble.setText(f"<b>{escaped_sender}</b><br>{escaped_text}")
+            bubble.setText(f"<div style='margin-bottom: 4px;'><b style='font-size: 12px; color: #5a5a5f;'>{escaped_sender}</b></div><div style='font-size: 14px; line-height: 1.4;'>{escaped_text}</div>")
         else:
-            if time_str:
-                bubble.setText(f"{escaped_text}<br><small style='color: rgba(255,255,255,0.8); font-size: 10px;'>{time_str}</small>")
+            bubble.setText(f"<div style='font-size: 14px; line-height: 1.4;'>{escaped_text}</div>")
+
+        # Timestamp label (separate from bubble)
+        time_label = None
+        if time_str:
+            time_label = QLabel(time_str)
+            time_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight if outgoing else QtCore.Qt.AlignmentFlag.AlignLeft)
+            if outgoing:
+                time_label.setStyleSheet("color: rgba(10, 132, 255, 0.7); font-size: 10px; font-weight: 500; padding: 2px 14px;")
             else:
-                bubble.setText(escaped_text)
+                time_label.setStyleSheet("color: #86868b; font-size: 10px; font-weight: 500; padding: 2px 14px;")
 
         if outgoing:
             # STYLE FOR YOUR OWN (SENDER) MESSAGES
             bubble.setStyleSheet(
                 """
-                background-color: #0b93f6;
-                color: #ffffff;
-                padding: 6px 12px;
-                border-radius: 18px;
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #0a84ff, stop:0.5 #0070e0, stop:1 #0066cc);
+                    color: #ffffff;
+                    padding: 11px 16px;
+                    border-radius: 20px;
+                    border-bottom-right-radius: 6px;
+                    font-weight: 500;
+                }
                 """
             )
+            bubble_layout.addWidget(bubble, 0, QtCore.Qt.AlignmentFlag.AlignRight)
+            if time_label:
+                bubble_layout.addWidget(time_label, 0, QtCore.Qt.AlignmentFlag.AlignRight)
             outer_layout.addStretch()
-            outer_layout.addWidget(bubble)
+            outer_layout.addWidget(bubble_container)
         else:
             # STYLE FOR INCOMING MESSAGES
             bubble.setStyleSheet(
                 """
-                background-color: #e5e5ea;
-                color: #111111;
-                padding: 6px 12px;
-                border-radius: 18px;
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #f5f6f8, stop:1 #e8eaed);
+                    color: #1d1d1f;
+                    padding: 11px 16px;
+                    border-radius: 20px;
+                    border-bottom-left-radius: 6px;
+                    font-weight: 500;
+                }
                 """
             )
-            outer_layout.addWidget(bubble)
+            bubble_layout.addWidget(bubble, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
+            if time_label:
+                bubble_layout.addWidget(time_label, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
+            outer_layout.addWidget(bubble_container)
             outer_layout.addStretch()
 
 
@@ -218,7 +280,7 @@ class SystemLine(QWidget):
 
         label = QLabel(text)
         label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        label.setStyleSheet("color: #8e8e93; font-size: 11px;")
+        label.setStyleSheet("color: #86868b; font-size: 11px; font-weight: 500;")
 
         layout.addStretch()
         layout.addWidget(label)
@@ -233,7 +295,7 @@ class ChatXClientGUI(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("ChatX – Multi-Protocol Secure Communication Platform")
-        self.resize(900, 600)
+        self.resize(1000, 650)
 
         # Networking
         self.network: Optional[NetworkManager] = None
@@ -283,133 +345,213 @@ class ChatXClientGUI(QMainWindow):
         conn_widget = QWidget()
         conn_widget.setObjectName("connectionPanel")
         conn_layout = QVBoxLayout()
-        conn_layout.setSpacing(8)
+        conn_layout.setSpacing(12)
+        conn_layout.setContentsMargins(16, 16, 16, 16)
         conn_widget.setLayout(conn_layout)
-        
+
+        # Panel title
+        panel_title = QLabel("Connection")
+        panel_title.setObjectName("panelTitle")
+        conn_layout.addWidget(panel_title)
+
         # Username display (read-only, set from dialog)
-        username_row = QHBoxLayout()
-        username_row.setSpacing(8)
-        username_label = QLabel("Username:")
-        username_label.setMinimumWidth(70)
+        username_container = QVBoxLayout()
+        username_container.setSpacing(6)
+        username_label = QLabel("Username")
+        username_label.setObjectName("fieldLabel")
         self.username_display = QLabel(self.username)
         self.username_display.setObjectName("usernameDisplay")
         self.username_display.setStyleSheet("""
-            QLabel {
-                background-color: #f2f2f7;
-                color: #111111;
-                border-radius: 6px;
-                padding: 8px 12px;
-                border: 1px solid #d1d1d6;
-                font-weight: 500;
+            QLabel#usernameDisplay {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #f0f1f3);
+                color: #1a1a2e;
+                border-radius: 8px;
+                padding: 10px 14px;
+                border: 1.5px solid rgba(0, 0, 0, 0.08);
+                font-weight: 600;
+                font-size: 14px;
             }
         """)
-        username_row.addWidget(username_label)
-        username_row.addWidget(self.username_display)
-        
-        # Server row
-        server_row = QHBoxLayout()
-        server_row.setSpacing(8)
-        server_label = QLabel("Server:")
-        server_label.setMinimumWidth(70)
+        username_container.addWidget(username_label)
+        username_container.addWidget(self.username_display)
+
+        # Server input
+        server_container = QVBoxLayout()
+        server_container.setSpacing(6)
+        server_label = QLabel("Server Address")
+        server_label.setObjectName("fieldLabel")
         self.server_edit = QLineEdit()
-        self.server_edit.setPlaceholderText("Server IP (e.g., localhost)")
+        self.server_edit.setPlaceholderText("Enter server IP (e.g., localhost)")
         self.server_edit.setText(self.server_ip)
-        server_row.addWidget(server_label)
-        server_row.addWidget(self.server_edit)
-        
+        server_container.addWidget(server_label)
+        server_container.addWidget(self.server_edit)
+
         # Connect button
         self.connect_btn = QPushButton("Connect to Server")
         self.connect_btn.clicked.connect(self.on_connect_clicked)
         self.connect_btn.setMinimumHeight(36)
-        
-        conn_layout.addLayout(username_row)
-        conn_layout.addLayout(server_row)
+        self.connect_btn.setMaximumHeight(36)
+
+        conn_layout.addLayout(username_container)
+        conn_layout.addLayout(server_container)
+        conn_layout.addSpacing(4)
         conn_layout.addWidget(self.connect_btn)
 
         left_panel.addWidget(conn_widget)
 
-        # Peer list section
+        # Peer list section with container
+        peers_widget = QWidget()
+        peers_widget.setObjectName("peersPanel")
+        peers_container_layout = QVBoxLayout()
+        peers_container_layout.setSpacing(10)
+        peers_container_layout.setContentsMargins(16, 16, 16, 16)
+        peers_widget.setLayout(peers_container_layout)
+
+        # Peers header with refresh button
+        peers_header = QHBoxLayout()
+        peers_header.setSpacing(8)
         peers_label = QLabel("Online Peers")
-        peers_label.setObjectName("sectionLabel")
-        left_panel.addWidget(peers_label)
-        
+        peers_label.setObjectName("panelTitle")
+        peers_header.addWidget(peers_label)
+        peers_header.addStretch()
+
+        self.refresh_peers_btn = QPushButton("Refresh")
+        self.refresh_peers_btn.clicked.connect(self.refresh_peers)
+        self.refresh_peers_btn.setEnabled(False)
+        self.refresh_peers_btn.setMinimumHeight(24)
+        self.refresh_peers_btn.setMaximumHeight(24)
+        self.refresh_peers_btn.setMinimumWidth(65)
+        self.refresh_peers_btn.setMaximumWidth(75)
+        self.refresh_peers_btn.setObjectName("smallButton")
+        peers_header.addWidget(self.refresh_peers_btn)
+
+        peers_container_layout.addLayout(peers_header)
+
         self.peer_list = QListWidget()
         self.peer_list.itemSelectionChanged.connect(self.on_peer_selected)
         self.peer_list.setMinimumHeight(200)
-        left_panel.addWidget(self.peer_list)
+        peers_container_layout.addWidget(self.peer_list)
 
-        self.refresh_peers_btn = QPushButton("🔄 Refresh Peer List")
-        self.refresh_peers_btn.clicked.connect(self.refresh_peers)
-        self.refresh_peers_btn.setEnabled(False)
-        left_panel.addWidget(self.refresh_peers_btn)
+        left_panel.addWidget(peers_widget)
 
         main_layout.addLayout(left_panel, 2)
 
-        # Right panel: chat + file transfer
+        # Right panel: chat interface with container
         right_panel = QVBoxLayout()
-        right_panel.setSpacing(12)
+        right_panel.setSpacing(0)
+
+        # Chat container widget
+        chat_widget = QWidget()
+        chat_widget.setObjectName("chatPanel")
+        chat_main_layout = QVBoxLayout()
+        chat_main_layout.setSpacing(0)
+        chat_main_layout.setContentsMargins(0, 0, 0, 0)
+        chat_widget.setLayout(chat_main_layout)
 
         # Chat header (shows current peer's username)
         self.chat_header = QWidget()
         self.chat_header.setObjectName("chatHeader")
-        self.chat_header.setMinimumHeight(50)
-        self.chat_header.setMaximumHeight(50)
+        self.chat_header.setMinimumHeight(56)
+        self.chat_header.setMaximumHeight(56)
         chat_header_layout = QHBoxLayout()
-        chat_header_layout.setContentsMargins(16, 8, 16, 8)
+        chat_header_layout.setContentsMargins(20, 12, 20, 12)
         self.chat_header_label = QLabel("Select a peer to start chatting")
         self.chat_header_label.setObjectName("chatHeaderLabel")
         chat_header_layout.addWidget(self.chat_header_label)
         chat_header_layout.addStretch()
         self.chat_header.setLayout(chat_header_layout)
-        right_panel.addWidget(self.chat_header)
-        
+        chat_main_layout.addWidget(self.chat_header)
+
         # Chat area: scroll area with vertical layout of bubbles
         self.chat_area = QtWidgets.QScrollArea()
         self.chat_area.setWidgetResizable(True)
         self.chat_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.chat_area.setObjectName("chatScrollArea")
 
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout()
-        self.chat_layout.setContentsMargins(4, 4, 4, 4)
-        self.chat_layout.setSpacing(6)
+        self.chat_layout.setContentsMargins(12, 12, 12, 12)
+        self.chat_layout.setSpacing(8)
         self.chat_layout.addStretch()  # spacer at bottom
         self.chat_container.setLayout(self.chat_layout)
 
         self.chat_area.setWidget(self.chat_container)
-        right_panel.addWidget(self.chat_area, 5)
+        chat_main_layout.addWidget(self.chat_area)
 
-        # Message input
+        # Chat input area
+        chat_input_widget = QWidget()
+        chat_input_widget.setObjectName("chatInputArea")
+        chat_input_layout = QVBoxLayout()
+        chat_input_layout.setSpacing(10)
+        chat_input_layout.setContentsMargins(16, 14, 16, 14)
+        chat_input_widget.setLayout(chat_input_layout)
+
+        # Message input row
         msg_layout = QHBoxLayout()
-        msg_layout.setSpacing(8)
+        msg_layout.setSpacing(10)
         self.msg_input = QLineEdit()
         self.msg_input.setPlaceholderText("Type a message...")
         self.msg_input.returnPressed.connect(self.send_message)
+        self.msg_input.setMinimumHeight(38)
+        self.msg_input.setMaximumHeight(38)
 
         self.send_btn = QPushButton("Send")
         self.send_btn.clicked.connect(self.send_message)
         self.send_btn.setEnabled(False)
-        self.send_btn.setMinimumWidth(80)
+        self.send_btn.setMinimumWidth(75)
+        self.send_btn.setMaximumWidth(85)
+        self.send_btn.setMinimumHeight(38)
+        self.send_btn.setMaximumHeight(38)
 
-        msg_layout.addWidget(self.msg_input, 4)
-        msg_layout.addWidget(self.send_btn, 1)
-        right_panel.addLayout(msg_layout)
+        msg_layout.addWidget(self.msg_input)
+        msg_layout.addWidget(self.send_btn)
+        chat_input_layout.addLayout(msg_layout)
 
-        # File transfer controls
+        # File transfer controls row
         file_layout = QHBoxLayout()
-        file_layout.setSpacing(8)
-        self.send_file_btn = QPushButton("📁 Send File")
+        file_layout.setSpacing(12)
+
+        # Icon for file button
+        self.send_file_btn = QPushButton("📎 Attach File")
         self.send_file_btn.clicked.connect(self.send_file)
         self.send_file_btn.setEnabled(False)
+        self.send_file_btn.setMinimumHeight(32)
+        self.send_file_btn.setMaximumHeight(32)
+        self.send_file_btn.setMinimumWidth(110)
+        self.send_file_btn.setMaximumWidth(130)
+        self.send_file_btn.setObjectName("fileButton")
+
+        # Progress bar with wrapper for better styling
+        progress_container = QWidget()
+        progress_container.setObjectName("progressContainer")
+        progress_container_layout = QVBoxLayout(progress_container)
+        progress_container_layout.setContentsMargins(0, 0, 0, 0)
+        progress_container_layout.setSpacing(4)
+
+        # Progress label
+        self.progress_label = QLabel("Ready to send files")
+        self.progress_label.setObjectName("progressLabel")
+        self.progress_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
 
         self.file_progress = QProgressBar()
         self.file_progress.setRange(0, 100)
         self.file_progress.setValue(0)
         self.file_progress.setTextVisible(False)
-        self.file_progress.setMinimumHeight(24)
+        self.file_progress.setMinimumHeight(8)
+        self.file_progress.setMaximumHeight(8)
+        self.file_progress.setObjectName("fileProgress")
+
+        progress_container_layout.addWidget(self.progress_label)
+        progress_container_layout.addWidget(self.file_progress)
 
         file_layout.addWidget(self.send_file_btn)
-        file_layout.addWidget(self.file_progress, 2)
-        right_panel.addLayout(file_layout)
+        file_layout.addWidget(progress_container)
+        chat_input_layout.addLayout(file_layout)
+
+        chat_main_layout.addWidget(chat_input_widget)
+
+        right_panel.addWidget(chat_widget)
 
         main_layout.addLayout(right_panel, 5)
 
@@ -419,157 +561,348 @@ class ChatXClientGUI(QMainWindow):
         self._set_status("Disconnected")
 
     def _apply_style(self):
-        """iMessage-ish light theme + primary buttons."""
+        """Modern premium design with gradients, shadows, and smooth interactions."""
         # mark primary buttons
         self.connect_btn.setObjectName("primaryButton")
         self.send_btn.setObjectName("primaryButton")
         self.send_file_btn.setObjectName("primaryButton")
 
         self.setStyleSheet("""
+        /* ========== Base Styles ========== */
         QWidget {
-            font-family: -apple-system, system-ui, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             font-size: 13px;
+            color: #2c2c2e;
         }
 
         QMainWindow {
-            background-color: #f2f2f7;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #f5f7fa, stop:1 #e8ecf1);
         }
 
         QLabel {
-            color: #111111;
+            color: #2c2c2e;
         }
-        
+
+        /* ========== Typography ========== */
         QLabel#sectionLabel {
             font-weight: 600;
             font-size: 14px;
             color: #1d1d1f;
             padding: 4px 0px;
         }
-        
-        QWidget#connectionPanel {
-            background-color: #ffffff;
-            border-radius: 12px;
-            padding: 12px;
-            border: 1px solid #d1d1d6;
+
+        QLabel#panelTitle {
+            font-weight: 700;
+            font-size: 16px;
+            color: #1a1a2e;
+            padding-bottom: 6px;
         }
-        
-        QLabel#dialogTitle {
-            font-size: 18px;
+
+        QLabel#fieldLabel {
             font-weight: 600;
-            color: #1d1d1f;
+            font-size: 10px;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        QLabel#dialogTitle {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1a1a2e;
             padding-bottom: 8px;
         }
-        
+
+        QLabel#chatHeaderLabel {
+            font-size: 17px;
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+
+        /* ========== Panel Containers ========== */
+        QWidget#connectionPanel {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #ffffff, stop:1 #fafbfc);
+            border-radius: 14px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        QWidget#peersPanel {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #ffffff, stop:1 #fafbfc);
+            border-radius: 14px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        QWidget#chatPanel {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* ========== Chat Header & Footer ========== */
         QWidget#chatHeader {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #fafbfc, stop:1 #f5f6f8);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+        }
+
+        QWidget#chatInputArea {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #f8f9fa, stop:1 #ffffff);
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom-left-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+
+        /* ========== List Widget ========== */
+        QListWidget {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #fafbfc, stop:1 #f5f6f8);
+            color: #2c2c2e;
+            border-radius: 10px;
+            padding: 6px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            outline: none;
+        }
+
+        QListWidget::item {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 3px 2px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        QListWidget::item:selected {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #0a84ff, stop:1 #0066cc);
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        QListWidget::item:hover {
+            background: rgba(11, 147, 246, 0.08);
+        }
+
+        QListWidget::item:selected:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #0a84ff, stop:1 #0066cc);
+        }
+
+        /* ========== Scroll Area ========== */
+        QScrollArea#chatScrollArea {
             background-color: #ffffff;
-            border-bottom: 1px solid #d1d1d6;
+            border: none;
             border-radius: 0px;
         }
-        
-        QLabel#chatHeaderLabel {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1d1d1f;
+
+        QScrollBar:vertical {
+            background: transparent;
+            width: 10px;
+            margin: 0px;
         }
 
-        QListWidget {
-            background-color: #ffffff;
-            color: #111111;
-            border-radius: 10px;
-            padding: 8px;
-            border: 1px solid #d1d1d6;
-        }
-        
-        QListWidget::item {
-            padding: 8px;
-            border-radius: 6px;
-        }
-        
-        QListWidget::item:selected {
-            background-color: #0b93f6;
-            color: #ffffff;
-        }
-        
-        QListWidget::item:hover {
-            background-color: #f2f2f7;
+        QScrollBar::handle:vertical {
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 5px;
+            min-height: 30px;
         }
 
-        QScrollArea {
-            background-color: #1c1c1e;
-            border-radius: 10px;
-            border: 1px solid #2c2c2e;
+        QScrollBar::handle:vertical:hover {
+            background: rgba(0, 0, 0, 0.25);
         }
 
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: none;
+        }
+
+        /* ========== Input Fields ========== */
         QLineEdit {
             background-color: #ffffff;
-            color: #111111;
+            color: #1d1d1f;
             border-radius: 8px;
-            padding: 8px 12px;
-            border: 1px solid #d1d1d6;
-            min-height: 20px;
+            padding: 9px 14px;
+            border: 1.5px solid rgba(0, 0, 0, 0.1);
+            min-height: 18px;
+            font-size: 14px;
+            selection-background-color: #0a84ff;
         }
 
         QLineEdit:focus {
-            border: 2px solid #0b93f6;
-            background-color: #fafafa;
+            border: 2px solid #0a84ff;
+            background-color: #ffffff;
         }
 
+        QLineEdit:hover {
+            border: 1.5px solid rgba(0, 0, 0, 0.15);
+        }
+
+        /* ========== Buttons ========== */
         QPushButton {
-            background-color: #e5e5ea;
-            color: #111111;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #fafbfc, stop:1 #f0f1f3);
+            color: #1d1d1f;
             border-radius: 8px;
-            padding: 8px 16px;
-            border: 1px solid #d1d1d6;
-            min-height: 32px;
+            padding: 7px 16px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            font-size: 13px;
+            font-weight: 600;
         }
 
         QPushButton:hover {
-            background-color: #d8d8dd;
-        }
-        
-        QPushButton:disabled {
-            background-color: #e5e5ea;
-            color: #8e8e93;
-            border: 1px solid #d1d1d6;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #f0f1f3, stop:1 #e5e6e8);
+            border: 1px solid rgba(0, 0, 0, 0.15);
         }
 
+        QPushButton:pressed {
+            background: #e0e1e3;
+            padding-top: 8px;
+            padding-bottom: 6px;
+        }
+
+        QPushButton:disabled {
+            background: #f5f5f7;
+            color: #a1a1a6;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* ========== Primary Buttons ========== */
         QPushButton#primaryButton {
-            background-color: #0b93f6;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #0a84ff, stop:1 #0066cc);
             color: #ffffff;
             border-radius: 8px;
             border: none;
-            font-weight: 600;
-            padding: 10px 20px;
-            min-height: 36px;
+            font-weight: 700;
+            padding: 8px 18px;
+            font-size: 14px;
         }
 
         QPushButton#primaryButton:hover {
-            background-color: #007aff;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #0077ed, stop:1 #005bb5);
         }
-        
+
+        QPushButton#primaryButton:pressed {
+            background: #005bb5;
+            padding-top: 9px;
+            padding-bottom: 7px;
+        }
+
         QPushButton#primaryButton:disabled {
-            background-color: #8e8e93;
+            background: #b8b8bd;
             color: #ffffff;
         }
 
-        QStatusBar {
-            color: #3c3c43;
-            background-color: #f2f2f7;
-            padding: 4px;
-            border-top: 1px solid #d1d1d6;
+        /* ========== Small Buttons ========== */
+        QPushButton#smallButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #fafbfc, stop:1 #f0f1f3);
+            color: #1d1d1f;
+            border-radius: 6px;
+            padding: 5px 12px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            font-size: 12px;
+            font-weight: 600;
         }
 
-        QProgressBar {
-            border: 1px solid #d1d1d6;
+        QPushButton#smallButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #f0f1f3, stop:1 #e5e6e8);
+        }
+
+        QPushButton#smallButton:disabled {
+            background: #f5f5f7;
+            color: #a1a1a6;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* ========== File Attach Button ========== */
+        QPushButton#fileButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #f8f9fb, stop:1 #eef0f3);
+            color: #2c2c2e;
             border-radius: 8px;
-            background-color: #ffffff;
+            padding: 7px 14px;
+            border: 1.5px solid rgba(0, 0, 0, 0.1);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        QPushButton#fileButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #eef0f3, stop:1 #e3e5e8);
+            border: 1.5px solid rgba(0, 0, 0, 0.15);
+        }
+
+        QPushButton#fileButton:pressed {
+            background: #dfe1e4;
+        }
+
+        QPushButton#fileButton:disabled {
+            background: #f5f5f7;
+            color: #a1a1a6;
+            border: 1.5px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* ========== Progress Container ========== */
+        QWidget#progressContainer {
+            background: transparent;
+        }
+
+        QLabel#progressLabel {
+            color: #6e6e73;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 0px 2px;
+        }
+
+        /* ========== Status Bar ========== */
+        QStatusBar {
+            color: #6e6e73;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #fafbfc, stop:1 #f5f7fa);
+            padding: 6px 12px;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            font-size: 12px;
+        }
+
+        /* ========== Progress Bar ========== */
+        QProgressBar {
+            border: none;
+            border-radius: 4px;
+            background-color: rgba(0, 0, 0, 0.08);
             text-align: center;
-            height: 10px;
+            height: 8px;
         }
 
         QProgressBar::chunk {
-            border-radius: 8px;
-            background-color: #0b93f6;
+            border-radius: 3px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #0a84ff, stop:0.5 #0070e0, stop:1 #00c853);
+        }
+
+        QProgressBar#fileProgress {
+            border: none;
+            border-radius: 4px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 rgba(10, 132, 255, 0.1), stop:1 rgba(0, 200, 83, 0.1));
+            height: 8px;
+        }
+
+        QProgressBar#fileProgress::chunk {
+            border-radius: 3px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #0a84ff, stop:0.3 #0070e0, stop:0.7 #00b8d4, stop:1 #00c853);
         }
         """)
 
@@ -792,7 +1125,10 @@ class ChatXClientGUI(QMainWindow):
             sender = event.get("sender")
             save_name = event.get("save_name")
             system_msg = f"Receiving file '{filename}' from {sender} -> saving as {save_name}"
-            
+
+            # Update progress label
+            self.progress_label.setText(f"Receiving: {filename}")
+
             # Store system message in sender's conversation
             if sender and sender in self.peers:
                 if sender not in self.conversations:
@@ -803,7 +1139,7 @@ class ChatXClientGUI(QMainWindow):
                     "text": system_msg,
                     "is_system": True
                 })
-            
+
             # Only show if this peer's conversation is open
             if sender == self.current_peer_username:
                 self._append_chat_line(system_msg)
@@ -815,12 +1151,18 @@ class ChatXClientGUI(QMainWindow):
             if total > 0:
                 percent = int(done / total * 100)
                 self.file_progress.setValue(percent)
+                # Update label with percentage
+                direction = "Sending" if event.get("bytes_sent") else "Receiving"
+                self.progress_label.setText(f"{direction}: {percent}% complete")
 
         elif etype == "file_complete":
             filename = event.get("filename")
             save_name = event.get("save_name")
             sender = event.get("sender")
             system_msg = f"File received from {sender}: {filename} (saved as {save_name})"
+
+            # Update progress label
+            self.progress_label.setText("Transfer complete!")
 
             # Store system message in sender's conversation
             if sender and sender in self.peers:
@@ -832,11 +1174,14 @@ class ChatXClientGUI(QMainWindow):
                     "text": system_msg,
                     "is_system": True
                 })
-            
+
             # Only show if this peer's conversation is open
             if sender == self.current_peer_username:
                 self._append_chat_line(system_msg)
             self.file_progress.setValue(100)
+
+            # Reset label after 3 seconds
+            QtCore.QTimer.singleShot(3000, lambda: self.progress_label.setText("Ready to send files"))
 
             # Ask if they want to open it
             reply = QtWidgets.QMessageBox.question(
@@ -916,7 +1261,7 @@ class ChatXClientGUI(QMainWindow):
     def _update_chat_header(self, peer_username: Optional[str]):
         """Update the chat header to show the current peer's username."""
         if peer_username:
-            self.chat_header_label.setText(f"💬 Chatting with {peer_username}")
+            self.chat_header_label.setText(f"Chatting with {peer_username}")
         else:
             self.chat_header_label.setText("Select a peer to start chatting")
     

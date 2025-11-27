@@ -1,0 +1,14 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Claude Code
+.claude/
+
+# Log files
+logs/
+*.log
+
+

@@ -20,6 +20,10 @@ from config import (
     SERVER_PORT,
 )
 
+# Import logging and encryption
+from logger import ChatLogger
+from encryption import MessageEncryption
+
 
 GuiCallbackType = Optional[Callable[[dict], None]]
 
@@ -32,7 +36,7 @@ class NetworkManager:
     - Communication with discovery server
     """
 
-    
+
     def __init__(self, username: str, gui_callback: GuiCallbackType = None):
         self.username = username
         self.gui_callback = gui_callback
@@ -45,6 +49,10 @@ class NetworkManager:
 
         self.running = False
         self._incoming_files = {}
+
+        # Initialize logger and encryption
+        self.logger = ChatLogger(username=username)
+        self.encryption = MessageEncryption()
 
     # ------------------------------------------------------------------
     # Socket setup and threads
@@ -101,19 +109,30 @@ class NetworkManager:
                     # Try to parse as JSON
                     text = data.decode("utf-8")
                     message_packet = json.loads(text)
-                    
+
                     # Check if it's a chat message packet
                     if message_packet.get("type") == "chat":
                         sender_username = message_packet.get("from", "unknown")
                         target_username = message_packet.get("to", "unknown")
-                        message_text = message_packet.get("text", "")
-                        
+                        encrypted_text = message_packet.get("text", "")
+
+                        # DECRYPT the message
+                        try:
+                            decrypted_text = self.encryption.decrypt_message(encrypted_text)
+                        except Exception as decrypt_error:
+                            # If decryption fails, use original (backwards compatibility)
+                            decrypted_text = encrypted_text
+                            self.logger.log_error("DECRYPTION", str(decrypt_error))
+
+                        # LOG the decrypted message with encrypted version for visibility
+                        self.logger.log_message_received(sender_username, decrypted_text, encrypted=encrypted_text)
+
                         self._emit_gui_event(
                             {
                                 "type": "chat_message",
                                 "sender_username": sender_username,
                                 "target_username": target_username,
-                                "message": message_text,
+                                "message": decrypted_text,  # Show decrypted message
                                 "direction": "incoming",
                             }
                         )
@@ -142,6 +161,7 @@ class NetworkManager:
                     )
         except Exception as e:
             print(f"TCP connection handling error: {e}")
+            self.logger.log_error("TCP_HANDLER", str(e))
         finally:
             client_socket.close()
 
@@ -165,31 +185,38 @@ class NetworkManager:
     def send_chat_message(self, peer_ip: str, peer_tcp_port: int, message: str, target_username: str = None) -> bool:
         """Send chat message to peer via TCP using JSON format with usernames."""
         try:
-            # Create JSON message packet with from/to usernames
+            # ENCRYPT the message before sending
+            encrypted_message = self.encryption.encrypt_message(message)
+
+            # Create JSON message packet with ENCRYPTED text
             message_packet = {
                 "type": "chat",
                 "from": self.username,
                 "to": target_username or "unknown",
-                "text": message
+                "text": encrypted_message  # Send encrypted version
             }
-            
+
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.connect((peer_ip, peer_tcp_port))
                 sock.send(json.dumps(message_packet).encode("utf-8"))
 
-            # Notify GUI about outgoing message
+            # LOG the original message with encrypted version for visibility
+            self.logger.log_message_sent(target_username or "unknown", message, encrypted=encrypted_message)
+
+            # Notify GUI about outgoing message (original text for display)
             self._emit_gui_event(
                 {
                     "type": "chat_message",
                     "sender_username": self.username,
                     "target_username": target_username,
-                    "message": message,
+                    "message": message,  # Display original message
                     "direction": "outgoing",
                 }
             )
             return True
         except Exception as e:
             print(f"Error sending message: {e}")
+            self.logger.log_error("SEND_MESSAGE", str(e))
             self._emit_gui_event(
                 {
                     "type": "status",
@@ -421,8 +448,16 @@ class NetworkManager:
                 sock.send(json.dumps(registration_data).encode("utf-8"))
                 response = sock.recv(4096).decode("utf-8")
                 result = json.loads(response)
+
+            # Log successful connection
+            if result.get("status") == "success":
+                self.logger.log_connection(server_ip, "SUCCESS")
+            else:
+                self.logger.log_connection(server_ip, f"FAILED: {result.get('message', 'Unknown error')}")
+
         except Exception as e:
             print(f"Registration error: {e}")
+            self.logger.log_error("REGISTRATION", str(e))
             result = {"status": "error", "message": str(e)}
 
         self._emit_gui_event(
@@ -437,8 +472,10 @@ class NetworkManager:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.connect((server_ip, SERVER_PORT))
                 sock.send(json.dumps(data).encode("utf-8"))
+            self.logger.log_disconnection(server_ip)
         except Exception as e:
             print(f"Unregister error: {e}")
+            self.logger.log_error("UNREGISTER", str(e))
 
     def get_peer_list(self, server_ip: str) -> dict:
         """Get list of active peers from server."""
@@ -474,6 +511,10 @@ class NetworkManager:
             except OSError:
                 pass
             self.udp_socket = None
+
+        # Close logger
+        if hasattr(self, 'logger'):
+            self.logger.close()
 
     # ------------------------------------------------------------------
     # Helpers
