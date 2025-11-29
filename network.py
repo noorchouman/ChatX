@@ -58,21 +58,22 @@ class NetworkManager:
     # Socket setup and threads
     # ------------------------------------------------------------------
     def initialize_network(self) -> bool:
-        """Initialize TCP and UDP sockets."""
+        """Initialize TCP and UDP sockets - localhost only."""
         try:
-            # TCP socket for chat
+            # TCP socket for chat (bind to localhost only)
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # 0 = pick any free port
-            self.tcp_socket.bind(("", 0))
+            # Bind to localhost with dynamic port (0 = pick any free port)
+            self.tcp_socket.bind(("127.0.0.1", 0))
             self.tcp_port = self.tcp_socket.getsockname()[1]
 
-            # UDP socket for file transfer
+            # UDP socket for file transfer (bind to localhost only)
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.udp_socket.bind(("", 0))
+            self.udp_socket.bind(("127.0.0.1", 0))
             self.udp_port = self.udp_socket.getsockname()[1]
 
             self.running = True
+            print(f"Network initialized: TCP port {self.tcp_port}, UDP port {self.udp_port} (localhost only)")
             return True
         except Exception as e:
             print(f"Network initialization error: {e}")

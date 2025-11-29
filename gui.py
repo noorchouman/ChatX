@@ -71,13 +71,13 @@ class UsernameDialog(QDialog):
 
         layout.addSpacing(4)
 
-        # Server input
+        # Server input (read-only for localhost)
         server_label = QLabel("Server IP:")
         layout.addWidget(server_label)
         self.server_input = QLineEdit()
-        self.server_input.setPlaceholderText("Server IP (e.g., localhost)")
-        from config import SERVER_HOST
-        self.server_input.setText(SERVER_HOST)
+        self.server_input.setText("127.0.0.1 (localhost only)")
+        self.server_input.setReadOnly(True)
+        self.server_input.setEnabled(False)
         layout.addWidget(self.server_input)
 
         layout.addSpacing(12)
@@ -170,8 +170,8 @@ class UsernameDialog(QDialog):
         return self.username_input.text().strip() or "User"
     
     def get_server_ip(self) -> str:
-        """Get the entered server IP."""
-        return self.server_input.text().strip() or "localhost"
+        """Get the server IP (always localhost)."""
+        return "127.0.0.1"
 
 
 # ----------------------------------------------------------------------
@@ -376,14 +376,16 @@ class ChatXClientGUI(QMainWindow):
         username_container.addWidget(username_label)
         username_container.addWidget(self.username_display)
 
-        # Server input
+        # Server input (read-only for localhost)
         server_container = QVBoxLayout()
         server_container.setSpacing(6)
         server_label = QLabel("Server Address")
         server_label.setObjectName("fieldLabel")
         self.server_edit = QLineEdit()
-        self.server_edit.setPlaceholderText("Enter server IP (e.g., localhost)")
-        self.server_edit.setText(self.server_ip)
+        self.server_edit.setPlaceholderText("localhost only")
+        self.server_edit.setText("127.0.0.1 (localhost)")
+        self.server_edit.setReadOnly(True)  # Prevent editing
+        self.server_edit.setEnabled(False)   # Visual indication
         server_container.addWidget(server_label)
         server_container.addWidget(self.server_edit)
 
@@ -932,7 +934,8 @@ class ChatXClientGUI(QMainWindow):
             self.close()
             return
 
-        self.server_ip = self.server_edit.text().strip() or SERVER_HOST
+        # Always use localhost
+        self.server_ip = "127.0.0.1"
 
         self.network = NetworkManager(
             username=self.username,
@@ -1184,13 +1187,33 @@ class ChatXClientGUI(QMainWindow):
             QtCore.QTimer.singleShot(3000, lambda: self.progress_label.setText("Ready to send files"))
 
             # Ask if they want to open it
-            reply = QtWidgets.QMessageBox.question(
-                self,
-                "File received",
-                f"File from {sender}:\n{filename}\n\nOpen it now?",
+            msg_box = QtWidgets.QMessageBox(self)
+            msg_box.setWindowTitle("File received")
+            msg_box.setText(f"File from {sender}:\n{filename}\n\nOpen it now?")
+            msg_box.setStandardButtons(
                 QtWidgets.QMessageBox.StandardButton.Yes
-                | QtWidgets.QMessageBox.StandardButton.No,
+                | QtWidgets.QMessageBox.StandardButton.No
             )
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #2b2b2b;
+                    color: white;
+                }
+                QMessageBox QLabel {
+                    color: white;
+                }
+                QPushButton {
+                    background-color: #3d3d3d;
+                    color: white;
+                    border: 1px solid #555;
+                    padding: 5px 15px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #4d4d4d;
+                }
+            """)
+            reply = msg_box.exec()
             if reply == QtWidgets.QMessageBox.StandardButton.Yes:
                 full_path = os.path.abspath(save_name)
                 QtGui.QDesktopServices.openUrl(

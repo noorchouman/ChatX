@@ -1,6 +1,7 @@
 # config.py
+# Configuration for localhost-only communication (same machine)
 
-SERVER_HOST = 'localhost'
+SERVER_HOST = '127.0.0.1'  # Localhost only - no external connections
 SERVER_PORT = 8888
 TCP_CHAT_PORT = 8889
 UDP_FILE_PORT = 8890

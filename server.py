@@ -31,16 +31,17 @@ class ChatXServer:
         self.server_socket: socket.socket | None = None
 
     def start_server(self) -> None:
-        """Start the discovery server (blocking call)."""
+        """Start the discovery server (blocking call) - localhost only."""
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         try:
-            self.server_socket.bind((self.host, self.port))
+            # Bind to localhost only (127.0.0.1) for same-machine communication
+            self.server_socket.bind(('127.0.0.1', self.port))
             self.server_socket.listen(5)
             self.running = True
-            print(f"ChatX Server started on {self.host}:{self.port}")
-            self._log_event("Server started")
+            print(f"ChatX Server started on 127.0.0.1:{self.port} (localhost only)")
+            self._log_event("Server started (localhost only)")
 
             while self.running:
                 try:
@@ -111,8 +112,9 @@ class ChatXServer:
                 else:
                     self._log_event(f"Peer re-registered: {username} from {address}")
 
+            # Force localhost IP for same-machine communication
             self.peers[username] = {
-                "ip": address[0],
+                "ip": "127.0.0.1",
                 "tcp_port": tcp_port,
                 "udp_port": udp_port,
                 "last_seen": datetime.now(),
