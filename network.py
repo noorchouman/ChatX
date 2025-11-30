@@ -38,13 +38,14 @@ class NetworkManager:
 
 
     def __init__(self, username: str, gui_callback: GuiCallbackType = None):
-        self.username = username
+        # Initializes network manager
+        self.username = username  # Client's username
         self.gui_callback = gui_callback
 
-        self.tcp_socket: Optional[socket.socket] = None
+        self.tcp_socket: Optional[socket.socket] = None  # TCP socket for chat - none initially
         self.udp_socket: Optional[socket.socket] = None
 
-        self.tcp_port: Optional[int] = None
+        self.tcp_port: Optional[int] = None  # TCP port number - none initially
         self.udp_port: Optional[int] = None
 
         self.running = False
@@ -60,12 +61,12 @@ class NetworkManager:
     def initialize_network(self) -> bool:
         """Initialize TCP and UDP sockets - localhost only."""
         try:
-            # TCP socket for chat (bind to localhost only)
+            # Creating TCP socket that binds to localhost only
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # Bind to localhost with dynamic port (0 = pick any free port)
+            # Binds to localhost; port number 0: OS picks any free port
             self.tcp_socket.bind(("127.0.0.1", 0))
-            self.tcp_port = self.tcp_socket.getsockname()[1]
+            self.tcp_port = self.tcp_socket.getsockname()[1]  # Gets the port number OS assigned
 
             # UDP socket for file transfer (bind to localhost only)
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -79,17 +80,21 @@ class NetworkManager:
             print(f"Network initialization error: {e}")
             return False
 
+    # Start thread that listens for incoming TCP connections
     def start_tcp_listener(self) -> None:
         """Start TCP listener thread for incoming chat connections."""
 
         def tcp_listener():
             assert self.tcp_socket is not None
-            self.tcp_socket.listen(5)
+            self.tcp_socket.listen(5)  # Start listening, max 5 queued connections
             while self.running:
                 try:
                     client_socket, address = self.tcp_socket.accept()
                 except OSError:
                     break
+                # Each connection gets its own thread
+                # Handler processes messages from that connection
+                # Daemon: dies when main program exits
                 threading.Thread(
                     target=self._handle_tcp_connection,
                     args=(client_socket, address),
@@ -98,21 +103,23 @@ class NetworkManager:
 
         threading.Thread(target=tcp_listener, daemon=True).start()
 
+    # Receiving loop - Handle messages from a single TCP connection (runs in handler thread)
     def _handle_tcp_connection(self, client_socket: socket.socket, address) -> None:
         """Handle incoming TCP chat connections with JSON message format."""
         try:
             while self.running:
-                data = client_socket.recv(BUFFER_SIZE)
-                if not data:
+                data = client_socket.recv(BUFFER_SIZE)  # Receive up to 4096 bytes
+                if not data:  # If no data, break the loop
                     break
 
                 try:
-                    # Try to parse as JSON
+                    # Convert bytes to string, then parse JSON
                     text = data.decode("utf-8")
                     message_packet = json.loads(text)
 
                     # Check if it's a chat message packet
                     if message_packet.get("type") == "chat":
+                        # Extract sender, target, encrypted text
                         sender_username = message_packet.get("from", "unknown")
                         target_username = message_packet.get("to", "unknown")
                         encrypted_text = message_packet.get("text", "")
@@ -128,6 +135,7 @@ class NetworkManager:
                         # LOG the decrypted message with encrypted version for visibility
                         self.logger.log_message_received(sender_username, decrypted_text, encrypted=encrypted_text)
 
+                        # Notify GUI about incoming message
                         self._emit_gui_event(
                             {
                                 "type": "chat_message",
@@ -138,7 +146,7 @@ class NetworkManager:
                             }
                         )
                     else:
-                        # Fallback: treat as plain text (for backwards compatibility)
+                        # Handle non-chat messages (plain text fallback)
                         self._emit_gui_event(
                             {
                                 "type": "chat_message",
@@ -166,6 +174,8 @@ class NetworkManager:
         finally:
             client_socket.close()
 
+    # Start thread that listens for incoming UDP packets
+    # Continuously receive UDP packets and process them
     def start_udp_listener(self) -> None:
         """Start UDP listener thread for file transfers."""
 
@@ -173,15 +183,20 @@ class NetworkManager:
             assert self.udp_socket is not None
             while self.running:
                 try:
+                    # recvfrom(): Receives UDP packet
+                    # Returns: (data_bytes, (ip, port))
+                    # BUFFER_SIZE * 2: 8192 bytes max
                     data, address = self.udp_socket.recvfrom(BUFFER_SIZE * 2)
                 except OSError:
                     break
+                # Process packet immediately (no separate thread)
+                # UDP is stateless, so no connection to maintain
                 self._handle_udp_data(data, address)
 
         threading.Thread(target=udp_listener, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # TCP chat
+    # TCP CHAT MESSAGE SENDING
     # ------------------------------------------------------------------
     def send_chat_message(self, peer_ip: str, peer_tcp_port: int, message: str, target_username: str = None) -> bool:
         """Send chat message to peer via TCP using JSON format with usernames."""
@@ -197,6 +212,8 @@ class NetworkManager:
                 "text": encrypted_message  # Send encrypted version
             }
 
+            # Create new socket, connect to peer
+            # with statement: auto-closes socket when done
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.connect((peer_ip, peer_tcp_port))
                 sock.send(json.dumps(message_packet).encode("utf-8"))
@@ -232,6 +249,7 @@ class NetworkManager:
     # ------------------------------------------------------------------
     def send_file(self, peer_ip: str, peer_udp_port: int, file_path: str) -> None:
         """Send a file to a peer over UDP using a simple JSON+base64 protocol."""
+        # Validate file exists
         if not os.path.isfile(file_path):
             self._emit_gui_event(
                 {
@@ -248,6 +266,7 @@ class NetworkManager:
         file_size = os.path.getsize(file_path)
 
         # Send FILE_START control packet
+        # Signals start of file transfer
         start_packet = {
             "type": FILE_TRANSFER_START,
             "filename": filename,
@@ -260,25 +279,29 @@ class NetworkManager:
 
         bytes_sent = 0
         try:
+            # Send file in chunks: read 1024 bytes at a time
             with open(file_path, "rb") as f:
                 while True:
                     chunk = f.read(FILE_CHUNK_SIZE)
                     if not chunk:
                         break
 
-                    # Encode chunk into base64 for JSON transport
+                    # Encode binary data as base64 (JSON-safe)
                     b64_chunk = base64.b64encode(chunk).decode("ascii")
                     chunk_packet = {
                         "type": FILE_TRANSFER_CHUNK,
                         "filename": filename,
                         "data": b64_chunk,
                     }
+                    # Send chunk packet
                     self.udp_socket.sendto(
                         json.dumps(chunk_packet).encode("utf-8"),
                         (peer_ip, peer_udp_port),
                     )
 
+                    # Track bytes sent
                     bytes_sent += len(chunk)
+                    # Update GUI with progress
                     self._emit_gui_event(
                         {
                             "type": "file_progress",
@@ -289,6 +312,7 @@ class NetworkManager:
                     )
 
             # Send FILE_END control packet
+            # Signals end of transfer
             end_packet = {"type": FILE_TRANSFER_END, "filename": filename}
             self.udp_socket.sendto(
                 json.dumps(end_packet).encode("utf-8"), (peer_ip, peer_udp_port)
@@ -319,7 +343,7 @@ class NetworkManager:
         - FILE_END:   {type, filename}
         """
         try:
-            text = data.decode("utf-8")
+            text = data.decode("utf-8")  # Convert bytes to string
             packet = json.loads(text)
         except (UnicodeDecodeError, json.JSONDecodeError):
             print("Received non-JSON UDP packet, ignoring.")
@@ -328,6 +352,7 @@ class NetworkManager:
         p_type = packet.get("type")
 
         if p_type == FILE_TRANSFER_START:
+            # Extract filename, size, sender
             filename = packet.get("filename")
             total_size = packet.get("size", 0)
             sender = packet.get("from", address[0])
@@ -341,14 +366,16 @@ class NetworkManager:
                 downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
             else:  # Linux/Mac
                 downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
-            
+
             chatx_dir = os.path.join(downloads, 'ChatX_Received')
             os.makedirs(chatx_dir, exist_ok=True)
-            
+
+            # Save name as named received_{filename}
             save_name = os.path.join(chatx_dir, f"received_{filename}")
             try:
                 f = open(save_name, "wb")
             except OSError as e:
+                # Notify GUI about error
                 self._emit_gui_event(
                     {
                         "type": "status",
@@ -376,6 +403,7 @@ class NetworkManager:
                 }
             )
 
+        # Process incoming file chunk
         elif p_type == FILE_TRANSFER_CHUNK:
             filename = packet.get("filename")
             if not filename:
@@ -398,8 +426,10 @@ class NetworkManager:
 
             f = info["file"]
             f.write(chunk)
+            # Update bytes_received counter
             info["bytes_received"] += len(chunk)
 
+            # Notify GUI with progress update
             self._emit_gui_event(
                 {
                     "type": "file_progress",
@@ -409,6 +439,7 @@ class NetworkManager:
                 }
             )
 
+        # Signals end of transfer
         elif p_type == FILE_TRANSFER_END:
             filename = packet.get("filename")
             if not filename:
@@ -422,6 +453,7 @@ class NetworkManager:
             f = info["file"]
             f.close()
 
+            # Notify GUI with completion message
             self._emit_gui_event(
                 {
                     "type": "file_complete",
@@ -434,9 +466,11 @@ class NetworkManager:
     # ------------------------------------------------------------------
     # Discovery server interaction
     # ------------------------------------------------------------------
+    # Register this client with discovery server
     def register_with_server(self, server_ip: str) -> dict:
         """Register peer with central server."""
         try:
+            # Create registration data
             registration_data = {
                  "type": PEER_REGISTER,
                 "username": self.username,
@@ -444,6 +478,7 @@ class NetworkManager:
                 "udp_port": self.udp_port,
 }
 
+            # Send to server
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.connect((server_ip, SERVER_PORT))
                 sock.send(json.dumps(registration_data).encode("utf-8"))
@@ -457,6 +492,7 @@ class NetworkManager:
                 self.logger.log_connection(server_ip, f"FAILED: {result.get('message', 'Unknown error')}")
 
         except Exception as e:
+            # Notify GUI about error
             print(f"Registration error: {e}")
             self.logger.log_error("REGISTRATION", str(e))
             result = {"status": "error", "message": str(e)}
@@ -466,6 +502,7 @@ class NetworkManager:
         )
         return result
 
+    # Unregister from server (clean disconnect)
     def unregister_from_server(self, server_ip: str) -> None:
         """Optional clean unregister."""
         try:
@@ -478,6 +515,7 @@ class NetworkManager:
             print(f"Unregister error: {e}")
             self.logger.log_error("UNREGISTER", str(e))
 
+    # Get list of active peers from server
     def get_peer_list(self, server_ip: str) -> dict:
         """Get list of active peers from server."""
         try:
@@ -492,11 +530,16 @@ class NetworkManager:
             result = {"status": "error", "message": str(e)}
 
         self._emit_gui_event({"type": "peer_list_result", "result": result})
-        return result
+        return result  # Return list of active peers
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
+    # Clean up network resources on shutdown
+    # Stop listener loops
+    # Close sockets
+    # Close logger
+    # Notify GUI about cleanup
     def cleanup(self) -> None:
         """Clean up network resources."""
         self.running = False
